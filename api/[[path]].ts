@@ -1,12 +1,14 @@
+
 // This serverless function is written for the Vercel Node.js runtime.
 // It acts as a secure proxy to the Finnhub API.
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
-export default async function handler(request, response) {
+export default async function handler(request: VercelRequest, response: VercelResponse) {
   // Vercel populates request.url with the path and query string.
   // We create a new URL object to easily parse it.
-  const incomingUrl = new URL(request.url, `http://${request.headers.host}`);
+  const incomingUrl = new URL(request.url || '', `http://${request.headers.host}`);
   const path = incomingUrl.pathname.replace('/api', '');
   const searchParams = incomingUrl.searchParams;
 
