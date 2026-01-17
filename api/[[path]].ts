@@ -1,64 +1,50 @@
-// This function should be deployed as a serverless/edge function (e.g., on Cloudflare Workers or Vercel).
+// This serverless function is written for the Vercel Node.js runtime.
 // It acts as a secure proxy to the Finnhub API.
-// Your frontend will make requests to this function's URL.
-// Remember to set the FINNHUB_API_KEY environment variable in your deployment settings.
-
-interface Env {
-  FINNHUB_API_KEY: string;
-}
 
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
-async function handleRequest(request: Request, env: Env) {
-  const url = new URL(request.url);
-  const path = url.pathname.replace('/api', '');
-  const searchParams = url.search;
+export default async function handler(request, response) {
+  // Vercel populates request.url with the path and query string.
+  // We create a new URL object to easily parse it.
+  const incomingUrl = new URL(request.url, `http://${request.headers.host}`);
+  const path = incomingUrl.pathname.replace('/api', '');
+  const searchParams = incomingUrl.searchParams;
 
-  const apiUrl = `${FINNHUB_BASE_URL}${path}${searchParams}`;
-  const finnhubUrl = new URL(apiUrl);
-  finnhubUrl.searchParams.set('token', env.FINNHUB_API_KEY);
+  // Construct the target Finnhub URL
+  const finnhubUrl = new URL(`${FINNHUB_BASE_URL}${path}`);
+  finnhubUrl.search = searchParams.toString();
+  finnhubUrl.searchParams.set('token', process.env.FINNHUB_API_KEY || '');
 
-  // Use Cloudflare's Cache API for caching
-  // FIX: Cast `caches` to `any` to access the `default` property. This is a non-standard property
-  // available in environments like Cloudflare Workers, and this bypasses the TypeScript type error.
-  const cache = (caches as any).default;
-  let response = await cache.match(finnhubUrl.toString());
+  try {
+    const apiResponse = await fetch(finnhubUrl.toString());
 
-  if (!response) {
-    console.log(`Cache miss for: ${finnhubUrl.toString()}`);
-    response = await fetch(finnhubUrl.toString(), {
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (response.ok) {
-        // Create a new response to modify headers
-        response = new Response(response.body, response);
-        response.headers.set('Cache-Control', 's-maxage=60'); // Cache for 60 seconds
-        
-        // waitUntil is specific to some environments like Cloudflare to not block the response
-        const promise = cache.put(finnhubUrl.toString(), response.clone());
-        if ((globalThis as any).waitUntil) {
-             (globalThis as any).waitUntil(promise);
-        }
+    // If Finnhub returns an error, forward it to the client
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      console.error(`Finnhub API error (${apiResponse.status}):`, errorText);
+      return response.status(apiResponse.status).send(errorText);
     }
-  } else {
-     console.log(`Cache hit for: ${finnhubUrl.toString()}`);
+
+    const data = await apiResponse.json();
+    
+    // Set CORS headers to allow the frontend to call this API
+    response.setHeader('Access-Control-Allow-Origin', '*');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    
+    // Set caching headers for Vercel's CDN.
+    // Cache successful responses for 60 seconds.
+    response.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+
+    // Handle CORS pre-flight requests
+    if (request.method === 'OPTIONS') {
+        return response.status(200).end();
+    }
+    
+    // Send the successful response back to the frontend
+    return response.status(200).json(data);
+
+  } catch (error) {
+    console.error('Error in API proxy function:', error);
+    return response.status(500).json({ error: 'Internal Server Error' });
   }
-  
-  // Add CORS headers to allow requests from any origin
-  const newHeaders = new Headers(response.headers);
-  newHeaders.set('Access-Control-Allow-Origin', '*');
-  newHeaders.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-  newHeaders.set('Access-Control-Allow-Headers', 'Content-Type');
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: newHeaders,
-  });
 }
-
-// Exporting a default object with a fetch handler is a common pattern for serverless functions.
-export default {
-  fetch: handleRequest,
-};
