@@ -48,10 +48,16 @@ const DraggableWidget: React.FC<DraggableWidgetProps> = ({ id, index, moveWidget
 
   preview(drop(ref));
 
+  // FIX: The `drag` connector function from react-dnd can have an incompatible type with
+  // React's `ref` prop in some TypeScript environments. Using a `useRef` and
+  // connecting it via `drag(ref)` is a documented and type-safe pattern to avoid this.
+  const dragHandleRef = useRef<HTMLDivElement>(null);
+  drag(dragHandleRef);
+
   return (
     <div ref={ref} style={{ opacity: isDragging ? 0.5 : 1 }} className="relative">
       {isEditMode && (
-        <div ref={drag} className="absolute -top-2 -left-2 p-2 cursor-move text-gray-400 bg-gray-800 rounded-full z-10">
+        <div ref={dragHandleRef} className="absolute -top-2 -left-2 p-2 cursor-move text-gray-400 bg-gray-800 rounded-full z-10">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
         </div>
       )}
