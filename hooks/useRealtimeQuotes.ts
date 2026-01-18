@@ -22,12 +22,16 @@ export function useRealtimeQuotes(tickers: string[]): { quotes: StockQuote[], la
           setLastUpdated(Date.now());
         }
       } catch (error) {
-        console.error("Failed to fetch realtime quotes", error);
+        // Log locally but don't spam console if it's just a rate limit
+        if (error instanceof Error && !error.message.includes('429')) {
+            console.error("Failed to fetch realtime quotes", error);
+        }
       }
     };
 
     fetchQuotes(); // Initial fetch
-    const interval = setInterval(fetchQuotes, 30000); // Poll every 30 seconds
+    // Use a longer interval for the free tier (60 seconds)
+    const interval = setInterval(fetchQuotes, 60000); 
 
     return () => {
       isMounted = false;
