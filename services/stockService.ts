@@ -3,46 +3,63 @@ import { StockQuote, StockDetails, ChartDataPoint, TimeRange, NewsArticle, Finan
 
 const API_BASE_URL = '/api';
 
-// Cache for company names to avoid hitting /stock/profile2 repeatedly
-const profileCache: Record<string, { name: string, ticker: string } | null> = {
-    'AAPL': { name: 'Apple Inc', ticker: 'AAPL' },
-    'GOOGL': { name: 'Alphabet Inc', ticker: 'GOOGL' },
-    'MSFT': { name: 'Microsoft Corp', ticker: 'MSFT' },
-    'AMZN': { name: 'Amazon.com Inc', ticker: 'AMZN' },
-    'TSLA': { name: 'Tesla Inc', ticker: 'TSLA' },
-    'NVDA': { name: 'NVIDIA Corp', ticker: 'NVDA' },
-    'META': { name: 'Meta Platforms Inc', ticker: 'META' },
-    'JPM': { name: 'JPMorgan Chase & Co', ticker: 'JPM' },
-    'V': { name: 'Visa Inc', ticker: 'V' },
-    'JNJ': { name: 'Johnson & Johnson', ticker: 'JNJ' },
-    'WMT': { name: 'Walmart Inc', ticker: 'WMT' },
-    'PG': { name: 'Procter & Gamble Co', ticker: 'PG' },
-    'DIS': { name: 'Walt Disney Co', ticker: 'DIS' },
+// Initial hardcoded cache for major indices to save API calls
+const MEMORY_CACHE: Record<string, { name: string, ticker: string }> = {
     'SPY': { name: 'S&P 500 ETF Trust', ticker: 'SPY' },
     'QQQ': { name: 'Invesco QQQ Trust', ticker: 'QQQ' },
-    'DIA': { name: 'SPDR Dow Jones Industrial Average ETF', ticker: 'DIA' }
+    'DIA': { name: 'Dow Jones Industrial Average', ticker: 'DIA' },
+    'AAPL': { name: 'Apple Inc', ticker: 'AAPL' },
+    'GOOGL': { name: 'Alphabet Inc', ticker: 'GOOGL' },
+    'MSFT': { name: 'Microsoft Corp', ticker: 'MSFT' }
+};
+
+const getCachedProfile = (ticker: string) => {
+    if (MEMORY_CACHE[ticker]) return MEMORY_CACHE[ticker];
+    try {
+        const stored = localStorage.getItem(`profile_${ticker}`);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                return parsed.data;
+            }
+        }
+    } catch (e) {}
+    return null;
+};
+
+const setCachedProfile = (ticker: string, data: any) => {
+    try {
+        localStorage.setItem(`profile_${ticker}`, JSON.stringify({
+            timestamp: Date.now(),
+            data
+        }));
+    } catch (e) {}
 };
 
 const POPULAR_TICKERS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META', 'JPM', 'V', 'JNJ', 'WMT', 'PG', 'DIS'];
 const MARKET_INDEX_TICKERS = ['SPY', 'QQQ', 'DIA'];
 
-// Queue to stay under 60 requests/minute
+// Rate limit handling: 60 per minute = 1 request every 1s.
+// We use 1500ms to be extremely safe against burst detection.
 let requestQueue: Promise<any> = Promise.resolve();
-const SAFE_DELAY = 500; // ms (Allows ~120 requests/minute, but effectively less due to network overhead)
+const REQUEST_GAP = 1500;
 
-const apiRequest = async <T>(endpoint: string): Promise<T> => {
+const apiRequest = async <T>(endpoint: string): Promise<T | null> => {
     const result = requestQueue.then(async () => {
-        await new Promise(resolve => setTimeout(resolve, SAFE_DELAY));
-        
-        const response = await fetch(`${API_BASE_URL}${endpoint}`);
-        if (!response.ok) {
-            if (response.status === 429) throw new Error('RATE_LIMIT');
-            throw new Error(`API Error: ${response.status}`);
+        await new Promise(resolve => setTimeout(resolve, REQUEST_GAP));
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`);
+            if (!response.ok) {
+                console.warn(`API responded with ${response.status} for ${endpoint}`);
+                return null;
+            }
+            return response.json();
+        } catch (e) {
+            return null;
         }
-        return response.json();
     });
 
-    requestQueue = result.catch(() => {});
+    requestQueue = result.catch(() => null);
     return result;
 };
 
@@ -51,30 +68,25 @@ const getQuote = async (ticker: string): Promise<StockQuote | null> => {
         const quoteData = await apiRequest<any>(`/quote?symbol=${ticker}`);
         if (!quoteData || (quoteData.c === 0 && quoteData.pc === 0)) return null;
 
-        let profile = profileCache[ticker];
-        
-        if (profile === undefined) {
-            try {
-                const profileData = await apiRequest<any>(`/stock/profile2?symbol=${ticker}`);
-                if (profileData && profileData.name) {
-                    profile = { name: profileData.name, ticker: profileData.ticker || ticker };
-                    profileCache[ticker] = profile;
-                } else {
-                    profileCache[ticker] = null;
-                }
-            } catch (e) {
-                profile = null;
+        let profile = getCachedProfile(ticker);
+        if (!profile) {
+            const profileData = await apiRequest<any>(`/stock/profile2?symbol=${ticker}`);
+            if (profileData && profileData.name) {
+                profile = { name: profileData.name, ticker: profileData.ticker || ticker };
+                setCachedProfile(ticker, profile);
+            } else {
+                profile = { name: ticker, ticker: ticker }; // Fallback
             }
         }
 
         return {
             ticker: ticker,
-            name: profile?.name || ticker,
+            name: profile.name,
             price: quoteData.c || quoteData.pc || 0,
             change: quoteData.d || 0,
             changePercent: quoteData.dp || 0,
         };
-    } catch (error: any) {
+    } catch (error) {
         return null;
     }
 };
@@ -85,14 +97,14 @@ export const stockService = {
             const quote = await getQuote(ticker);
             if (!quote) return null;
 
-            // Fetch details sequentially to avoid burst errors
+            // Fetch details one by one to respect the queue
             const chartData: any = {};
             for (const range of ['1D', '5D', '1M', '6M', '1Y', '5Y']) {
                 chartData[range] = await this.getChartData(ticker, range as TimeRange);
             }
             
-            const financials = await this.getFinancials(ticker);
-            const news = await this.getNews(ticker);
+            const financials = await this.getFinancials(ticker) || [];
+            const news = await this.getNews(ticker) || [];
             
             return { quote, chartData, financials, news };
         } catch (error) {
@@ -101,13 +113,13 @@ export const stockService = {
     },
 
     async getChartData(ticker: string, range: TimeRange): Promise<ChartDataPoint[]> {
-        let resolution = 'D';
         const to = Math.floor(Date.now() / 1000);
         let from = 0;
-        const getFromDate = (modifier: (d: Date) => void): number => {
-            const date = new Date();
-            modifier(date);
-            return Math.floor(date.getTime() / 1000);
+        let resolution = 'D';
+        const getFromDate = (modifier: (d: Date) => void) => {
+            const d = new Date();
+            modifier(d);
+            return Math.floor(d.getTime() / 1000);
         };
 
         switch (range) {
@@ -119,85 +131,75 @@ export const stockService = {
             case '5Y': resolution = 'M'; from = getFromDate(d => d.setFullYear(d.getFullYear() - 5)); break;
         }
 
-        try {
-            const candleData = await apiRequest<any>(`/stock/candle?symbol=${ticker}&resolution=${resolution}&from=${from}&to=${to}`);
-            if (!candleData || !candleData.c) return [];
-            return candleData.c.map((price: number, index: number) => ({
-                price: parseFloat(price.toFixed(2)),
-                date: new Date(candleData.t[index] * 1000).toISOString(),
-            }));
-        } catch(e) { return []; }
+        const data = await apiRequest<any>(`/stock/candle?symbol=${ticker}&resolution=${resolution}&from=${from}&to=${to}`);
+        if (!data || !data.c) return [];
+        return data.c.map((price: number, i: number) => ({
+            price: parseFloat(price.toFixed(2)),
+            date: new Date(data.t[i] * 1000).toISOString(),
+        }));
     },
 
     async getFinancials(ticker: string): Promise<FinancialMetric[]> {
-        try {
-            const metrics = await apiRequest<any>(`/stock/metric?symbol=${ticker}&metric=all`);
-            if (!metrics || !metrics.metric) return [];
-            const f = (num: number) => {
-                if (!num) return 'N/A';
-                if (num > 1e12) return `${(num / 1e12).toFixed(2)}T`;
-                if (num > 1e9) return `${(num / 1e9).toFixed(2)}B`;
-                if (num > 1e6) return `${(num / 1e6).toFixed(2)}M`;
-                return num.toString();
-            };
-            return [
-                { label: 'Market Cap', value: f(metrics.metric.marketCapitalization) },
-                { label: '52W High', value: `$${metrics.metric['52WeekHigh']?.toFixed(2) ?? 'N/A'}` },
-                { label: '52W Low', value: `$${metrics.metric['52WeekLow']?.toFixed(2) ?? 'N/A'}` },
-                { label: 'P/E Ratio', value: metrics.metric.peNormalizedAnnual?.toFixed(2) ?? 'N/A' },
-            ];
-        } catch(e) { return []; }
+        const metrics = await apiRequest<any>(`/stock/metric?symbol=${ticker}&metric=all`);
+        if (!metrics || !metrics.metric) return [];
+        const f = (n: number) => {
+            if (!n) return 'N/A';
+            if (n > 1e12) return `${(n / 1e12).toFixed(2)}T`;
+            if (n > 1e9) return `${(n / 1e9).toFixed(2)}B`;
+            if (n > 1e6) return `${(n / 1e6).toFixed(2)}M`;
+            return n.toString();
+        };
+        return [
+            { label: 'Market Cap', value: f(metrics.metric.marketCapitalization) },
+            { label: '52W High', value: `$${metrics.metric['52WeekHigh']?.toFixed(2) ?? 'N/A'}` },
+            { label: '52W Low', value: `$${metrics.metric['52WeekLow']?.toFixed(2) ?? 'N/A'}` },
+            { label: 'P/E Ratio', value: metrics.metric.peNormalizedAnnual?.toFixed(2) ?? 'N/A' },
+        ];
     },
 
     async getNews(ticker: string): Promise<NewsArticle[]> {
-        try {
-            const today = new Date();
-            const monthAgo = new Date();
-            monthAgo.setMonth(today.getMonth() - 1);
-            const formatDate = (date: Date) => date.toISOString().split('T')[0];
-            const articles = await apiRequest<any[]>(`/company-news?symbol=${ticker}&from=${formatDate(monthAgo)}&to=${formatDate(today)}`);
-            if (!articles) return [];
-            return articles.slice(0, 10).map(article => ({
-                headline: article.headline,
-                source: article.source,
-                publishedAt: article.datetime,
-                url: article.url,
-                impact: article.headline.toLowerCase().includes('earnings') ? 'High' : 'Medium',
-            }));
-        } catch(e) { return []; }
+        const today = new Date();
+        const monthAgo = new Date();
+        monthAgo.setMonth(today.getMonth() - 1);
+        const formatDate = (d: Date) => d.toISOString().split('T')[0];
+        const data = await apiRequest<any[]>(`/company-news?symbol=${ticker}&from=${formatDate(monthAgo)}&to=${formatDate(today)}`);
+        if (!data) return [];
+        return data.slice(0, 10).map(a => ({
+            headline: a.headline,
+            source: a.source,
+            publishedAt: a.datetime,
+            url: a.url,
+            impact: a.headline.toLowerCase().includes('earnings') ? 'High' : 'Medium',
+        }));
     },
 
     async searchStocks(query: string): Promise<StockQuote[]> {
         if (!query) return [];
-        try {
-            const searchResults = await apiRequest<any>(`/search?q=${query}`);
-            if (!searchResults.result) return [];
-            const symbols = searchResults.result.filter((r: any) => !r.symbol.includes('.')).slice(0, 3).map((r: any) => r.symbol);
-            return this.getWatchlistQuotes(symbols);
-        } catch(e) { return []; }
+        const data = await apiRequest<any>(`/search?q=${query}`);
+        if (!data || !data.result) return [];
+        const symbols = data.result.filter((r: any) => !r.symbol.includes('.')).slice(0, 3).map((r: any) => r.symbol);
+        return this.getWatchlistQuotes(symbols);
     },
 
     async getWatchlistQuotes(tickers: string[]): Promise<StockQuote[]> {
         const quotes = [];
-        for (const ticker of tickers) {
-            const q = await getQuote(ticker);
+        for (const t of tickers) {
+            const q = await getQuote(t);
             if (q) quotes.push(q);
         }
         return quotes;
     },
 
     async getGlobalNews(): Promise<NewsArticle[]> {
-        try {
-            const articles = await apiRequest<any[]>(`/news?category=general`);
-            if (!articles) return [];
-            return articles.slice(0, 10).map(article => ({
-                headline: article.headline,
-                source: article.source,
-                publishedAt: article.datetime,
-                url: article.url,
-                impact: 'Medium',
-            }));
-        } catch (e) { return []; }
+        const data = await apiRequest<any[]>(`/news?category=general`);
+        if (!data) return [];
+        return data.slice(0, 10).map(a => ({
+            headline: a.headline,
+            source: a.source,
+            publishedAt: a.datetime,
+            url: a.url,
+            impact: 'Medium',
+        }));
     },
 
     getAllStockTickers: (): string[] => POPULAR_TICKERS,
