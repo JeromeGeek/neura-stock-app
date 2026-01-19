@@ -4,40 +4,49 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 
 export default async function handler(request: VercelRequest, response: VercelResponse) {
-  // Extract the path after /api/
-  const fullUrl = new URL(request.url || '', `http://${request.headers.host}`);
-  const path = fullUrl.pathname.replace('/api', '');
+  // path is an array: e.g. ["stock", "profile2"]
+  const { path: pathSegments, ...queryParams } = request.query;
   
-  // Construct the target Finnhub URL with the same query parameters
-  const finnhubUrl = new URL(`${FINNHUB_BASE_URL}${path}`);
-  fullUrl.searchParams.forEach((value, key) => {
-    finnhubUrl.searchParams.set(key, value);
+  if (!pathSegments) {
+    return response.status(400).json({ error: 'Missing path' });
+  }
+
+  const pathString = Array.isArray(pathSegments) ? pathSegments.join('/') : pathSegments;
+  
+  // Build the target URL for Finnhub
+  const targetUrl = new URL(`${FINNHUB_BASE_URL}/${pathString}`);
+  
+  // Forward all query parameters (symbol, resolution, etc.)
+  Object.entries(queryParams).forEach(([key, value]) => {
+    if (value !== undefined) {
+      targetUrl.searchParams.set(key, String(value));
+    }
   });
   
-  // Add the API Key
-  finnhubUrl.searchParams.set('token', process.env.FINNHUB_API_KEY || '');
+  // Append API Key
+  targetUrl.searchParams.set('token', process.env.FINNHUB_API_KEY || '');
 
   try {
-    const apiResponse = await fetch(finnhubUrl.toString());
+    const apiResponse = await fetch(targetUrl.toString());
 
     if (!apiResponse.ok) {
       const errorText = await apiResponse.text();
-      // Handle rate limit specifically
-      if (apiResponse.status === 429) {
-          return response.status(429).json({ error: 'Rate limit exceeded' });
-      }
-      return response.status(apiResponse.status).send(errorText);
+      return response.status(apiResponse.status).json({ 
+        error: 'Finnhub API Error', 
+        status: apiResponse.status,
+        details: errorText
+      });
     }
 
     const data = await apiResponse.json();
     
-    // Set response headers
+    // Set CORS and Cache headers
     response.setHeader('Access-Control-Allow-Origin', '*');
-    response.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+    response.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
     
     return response.status(200).json(data);
   } catch (error) {
     console.error('Proxy Error:', error);
-    return response.status(500).json({ error: 'Internal Server Error' });
+    return response.status(500).json({ error: 'Internal Proxy Error' });
   }
 }
