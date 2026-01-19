@@ -3,25 +3,33 @@ import { StockQuote, StockDetails, ChartDataPoint, TimeRange, NewsArticle, Finan
 
 const API_BASE_URL = '/api';
 
-// Initial hardcoded cache for major indices to save API calls
-const MEMORY_CACHE: Record<string, { name: string, ticker: string }> = {
-    'SPY': { name: 'S&P 500 ETF Trust', ticker: 'SPY' },
-    'QQQ': { name: 'Invesco QQQ Trust', ticker: 'QQQ' },
-    'DIA': { name: 'Dow Jones Industrial Average', ticker: 'DIA' },
+// Pre-populated cache to avoid "Profile" API calls for the most common tickers
+const STATIC_PROFILE_CACHE: Record<string, { name: string, ticker: string }> = {
     'AAPL': { name: 'Apple Inc', ticker: 'AAPL' },
     'GOOGL': { name: 'Alphabet Inc', ticker: 'GOOGL' },
-    'MSFT': { name: 'Microsoft Corp', ticker: 'MSFT' }
+    'MSFT': { name: 'Microsoft Corp', ticker: 'MSFT' },
+    'AMZN': { name: 'Amazon.com Inc', ticker: 'AMZN' },
+    'TSLA': { name: 'Tesla Inc', ticker: 'TSLA' },
+    'NVDA': { name: 'NVIDIA Corp', ticker: 'NVDA' },
+    'META': { name: 'Meta Platforms Inc', ticker: 'META' },
+    'JPM': { name: 'JPMorgan Chase & Co', ticker: 'JPM' },
+    'V': { name: 'Visa Inc', ticker: 'V' },
+    'JNJ': { name: 'Johnson & Johnson', ticker: 'JNJ' },
+    'WMT': { name: 'Walmart Inc', ticker: 'WMT' },
+    'PG': { name: 'Procter & Gamble Co', ticker: 'PG' },
+    'DIS': { name: 'Walt Disney Co', ticker: 'DIS' },
+    'SPY': { name: 'S&P 500 ETF Trust', ticker: 'SPY' },
+    'QQQ': { name: 'Invesco QQQ Trust', ticker: 'QQQ' },
+    'DIA': { name: 'SPDR Dow Jones Industrial Average ETF', ticker: 'DIA' }
 };
 
 const getCachedProfile = (ticker: string) => {
-    if (MEMORY_CACHE[ticker]) return MEMORY_CACHE[ticker];
+    if (STATIC_PROFILE_CACHE[ticker]) return STATIC_PROFILE_CACHE[ticker];
     try {
         const stored = localStorage.getItem(`profile_${ticker}`);
         if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
-                return parsed.data;
-            }
+            const { timestamp, data } = JSON.parse(stored);
+            if (Date.now() - timestamp < 48 * 60 * 60 * 1000) return data;
         }
     } catch (e) {}
     return null;
@@ -29,32 +37,29 @@ const getCachedProfile = (ticker: string) => {
 
 const setCachedProfile = (ticker: string, data: any) => {
     try {
-        localStorage.setItem(`profile_${ticker}`, JSON.stringify({
-            timestamp: Date.now(),
-            data
-        }));
+        localStorage.setItem(`profile_${ticker}`, JSON.stringify({ timestamp: Date.now(), data }));
     } catch (e) {}
 };
 
 const POPULAR_TICKERS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'NVDA', 'META', 'JPM', 'V', 'JNJ', 'WMT', 'PG', 'DIS'];
 const MARKET_INDEX_TICKERS = ['SPY', 'QQQ', 'DIA'];
 
-// Rate limit handling: 60 per minute = 1 request every 1s.
-// We use 1500ms to be extremely safe against burst detection.
+// Global Request Queue to strictly follow Finnhub Free Tier (60 req/min)
 let requestQueue: Promise<any> = Promise.resolve();
-const REQUEST_GAP = 1500;
+const REQ_DELAY = 1300; // 1.3s to be safe against network jitter
 
 const apiRequest = async <T>(endpoint: string): Promise<T | null> => {
     const result = requestQueue.then(async () => {
-        await new Promise(resolve => setTimeout(resolve, REQUEST_GAP));
+        await new Promise(resolve => setTimeout(resolve, REQ_DELAY));
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`);
             if (!response.ok) {
-                console.warn(`API responded with ${response.status} for ${endpoint}`);
+                console.error(`API request failed for ${endpoint}: Status ${response.status}`);
                 return null;
             }
             return response.json();
         } catch (e) {
+            console.error(`Network error fetching from ${endpoint}:`, e);
             return null;
         }
     });
@@ -75,7 +80,7 @@ const getQuote = async (ticker: string): Promise<StockQuote | null> => {
                 profile = { name: profileData.name, ticker: profileData.ticker || ticker };
                 setCachedProfile(ticker, profile);
             } else {
-                profile = { name: ticker, ticker: ticker }; // Fallback
+                profile = { name: ticker, ticker: ticker };
             }
         }
 
@@ -97,16 +102,16 @@ export const stockService = {
             const quote = await getQuote(ticker);
             if (!quote) return null;
 
-            // Fetch details one by one to respect the queue
             const chartData: any = {};
-            for (const range of ['1D', '5D', '1M', '6M', '1Y', '5Y']) {
-                chartData[range] = await this.getChartData(ticker, range as TimeRange);
+            const ranges: TimeRange[] = ['1D', '5D', '1M', '6M', '1Y', '5Y'];
+            for (const range of ranges) {
+                chartData[range] = await this.getChartData(ticker, range);
             }
             
-            const financials = await this.getFinancials(ticker) || [];
-            const news = await this.getNews(ticker) || [];
+            const financials = await this.getFinancials(ticker);
+            const news = await this.getNews(ticker);
             
-            return { quote, chartData, financials, news };
+            return { quote, chartData, financials: financials || [], news: news || [] };
         } catch (error) {
             return null;
         }
