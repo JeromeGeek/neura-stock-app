@@ -14,6 +14,7 @@ const WIDGET_TYPE = 'DASHBOARD_WIDGET';
 interface HomePageProps {
   onSelectTicker: (ticker: string) => void;
   onCompare: (tickers: string[]) => void;
+  onDataLoaded?: () => void;
 }
 
 interface DraggableWidgetProps {
@@ -66,10 +67,23 @@ const DraggableWidget: React.FC<DraggableWidgetProps> = ({ id, index, moveWidget
   );
 };
 
-const HomePage: React.FC<HomePageProps> = ({ onSelectTicker, onCompare }) => {
+const HomePage: React.FC<HomePageProps> = ({ onSelectTicker, onCompare, onDataLoaded }) => {
   const { watchlist, removeFromWatchlist } = useWatchlist();
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
   const { widgets, setWidgets, moveWidget, isEditMode, setIsEditMode, toggleWidgetVisibility } = useDashboardLayout();
+  const [dataLoadedNotified, setDataLoadedNotified] = useState(false);
+
+  // Notify parent when initial data is loaded
+  React.useEffect(() => {
+    if (!dataLoadedNotified && watchlist !== undefined && onDataLoaded) {
+      // Wait a bit for initial rendering
+      const timer = setTimeout(() => {
+        onDataLoaded();
+        setDataLoadedNotified(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [watchlist, dataLoadedNotified, onDataLoaded]);
 
   const handleToggleCompare = (ticker: string) => {
     setSelectedForCompare(prev =>

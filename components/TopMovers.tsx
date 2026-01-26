@@ -33,11 +33,18 @@ const MoverItem: React.FC<{ stock: StockQuote, onSelectTicker: (ticker: string) 
 const TopMovers: React.FC<TopMoversProps> = ({ onSelectTicker }) => {
     const { quotes } = useRealtimeQuotes(popularTickers);
 
-    if (quotes.length === 0) {
+    // Show partial data as it loads (progressive rendering)
+    const hasData = quotes.length > 0;
+    const isFullyLoaded = quotes.length === popularTickers.length;
+
+    if (!hasData) {
         return (
             <Card>
                 <h2 className="text-2xl font-bold mb-4">Top Movers</h2>
-                <p className="text-gray-400">Loading data...</p>
+                <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
+                    <p className="text-gray-400 ml-3">Loading market data...</p>
+                </div>
             </Card>
         );
     }
@@ -48,7 +55,15 @@ const TopMovers: React.FC<TopMoversProps> = ({ onSelectTicker }) => {
 
     return (
         <Card>
-            <h2 className="text-2xl font-bold mb-4">Top Movers</h2>
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">Top Movers</h2>
+                {!isFullyLoaded && (
+                    <span className="text-xs text-gray-500 flex items-center">
+                        <div className="animate-spin rounded-full h-3 w-3 border-t border-b border-emerald-500 mr-2"></div>
+                        Loading {quotes.length}/{popularTickers.length}
+                    </span>
+                )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                     <h3 className="text-lg font-semibold text-green-500 mb-2">Top Gainers</h3>

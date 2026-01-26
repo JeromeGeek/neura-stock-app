@@ -8,6 +8,18 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api': {
+            target: 'https://finnhub.io/api/v1',
+            changeOrigin: true,
+            rewrite: (path) => {
+              // Remove /api prefix and add token
+              const newPath = path.replace(/^\/api/, '');
+              const separator = newPath.includes('?') ? '&' : '?';
+              return `${newPath}${separator}token=${env.FINNHUB_API_KEY || ''}`;
+            },
+          },
+        },
       },
       plugins: [react()],
       define: {

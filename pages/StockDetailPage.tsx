@@ -65,11 +65,16 @@ const StockDetailPage: React.FC<StockDetailPageProps> = ({ ticker, onBack }) => 
 
   return (
     <div className="space-y-6">
-      <button onClick={onBack} className="text-emerald-400 hover:text-emerald-300 mb-2 flex items-center gap-1">
+      <button 
+        onClick={onBack} 
+        className="text-emerald-400 hover:text-emerald-300 mb-2 flex items-center gap-1 group"
+        title="Press ESC to go back"
+      >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
         Back to Dashboard
+        <span className="text-xs text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity ml-2">(ESC)</span>
       </button>
 
       <StockHeader 
@@ -84,14 +89,8 @@ const StockDetailPage: React.FC<StockDetailPageProps> = ({ ticker, onBack }) => 
         setTimeRange={setTimeRange}
         isPositive={isPositive}
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-            <Financials data={financials} />
-        </div>
-        <div>
-            <News articles={news} />
-        </div>
-      </div>
+      <Financials data={financials} />
+      <News articles={news} ticker={ticker} />
     </div>
   );
 };

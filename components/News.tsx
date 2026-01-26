@@ -7,6 +7,7 @@ import { formatTimeAgo } from '../utils/formatTime';
 
 interface NewsProps {
   articles: NewsArticle[];
+  ticker?: string; // Optional ticker to show in title
 }
 
 const impactInfo: Record<NewsImpact, { label: string; emoji: string; color: string }> = {
@@ -15,7 +16,7 @@ const impactInfo: Record<NewsImpact, { label: string; emoji: string; color: stri
   Low: { label: 'Noise / Opinion', emoji: '🔴', color: 'text-red-400' },
 };
 
-const News: React.FC<NewsProps> = ({ articles }) => {
+const News: React.FC<NewsProps> = ({ articles, ticker }) => {
   const [hideLowImpact, setHideLowImpact] = useState(false);
 
   const filteredArticles = articles.filter(a => !hideLowImpact || a.impact !== 'Low');
@@ -23,7 +24,9 @@ const News: React.FC<NewsProps> = ({ articles }) => {
   return (
     <Card>
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-        <h2 className="text-2xl font-bold">News</h2>
+        <h2 className="text-2xl font-bold">
+          {ticker ? `${ticker} News` : 'News'}
+        </h2>
         <ToggleSwitch 
           label="Hide low-impact news"
           isChecked={hideLowImpact}

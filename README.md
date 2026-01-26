@@ -1,104 +1,84 @@
 
 # NEURA 📈
 
-**NEURA** is a minimalistic, dark-mode stock tracking web application designed for modern investors. It provides a clean, fast, and intuitive interface to monitor stock prices, view interactive charts, manage a personalized watchlist, and stay updated with the latest financial news. The focus is on clarity and performance, offering key insights without the complexity of trading functionalities.
-
-![NEURA Screenshot](https://i.imgur.com/8Q6tJ2g.png)
+A modern stock tracking web application for monitoring real-time stock prices, managing watchlists, and viewing financial news.
 
 ---
 
-## 📖 Description
-
-NEURA is a sleek and modern stock tracking application for investors who value speed, clarity, and design. In a world of complex trading platforms, NEURA takes a minimalist approach, delivering critical financial insights without the clutter. It offers real-time stock quotes, beautiful interactive charts, and a personalized watchlist in a responsive, dark-mode interface, making it the perfect companion for monitoring your portfolio and the market.
-
----
-
-## ✨ Key Features
-
-- **Real-time Stock Quotes**: Get the latest prices and daily changes for your favorite stocks, with subtle flashing indicators for price movements.
-- **Customizable Dashboard**: A drag-and-drop interface to arrange widgets like your Watchlist, Market Overview, Top Movers, and Global News to your preference.
-- **Interactive Charts**: Visualize historical performance with beautiful, responsive charts. Switch between time ranges from 1-day to 5-years.
-- **Personalized Watchlist**: Add and remove stocks from a personal watchlist that persists in your browser's local storage.
-- **Stock Comparison Tool**: Select two or more stocks from your watchlist to compare their performance over time on a single normalized chart.
-- **Financial News**: Access the latest news for a specific stock or view top global financial headlines.
-- **Powerful Search**: Quickly find any stock by its ticker or company name.
-- **Clean & Responsive UI**: A sleek, dark-mode design that looks great and is fully functional on both desktop and mobile devices.
-
----
-
-## 🛠️ Tech Stack
-
-This project is built with a modern, efficient, and dependency-light stack.
-
-- **Frontend**: [React](https://react.dev/) & [TypeScript](https://www.typescriptlang.org/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/) (via CDN for simplicity)
-- **Charting**: [Recharts](https://recharts.org/)
-- **Drag & Drop**: [React DnD](https://react-dnd.github.io/react-dnd/)
-- **Data Source**: [Finnhub.io API](https://finnhub.io/)
-- **Deployment**: [Vercel](https://vercel.com/)
-
----
-
-## 🚀 Getting Started & Deployment
-
-This application is designed for a seamless deployment on Vercel, which handles the serverless API proxy required to protect your API key.
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- A [GitHub](https://github.com/) account.
-- A free API key from [Finnhub.io](https://finnhub.io/).
+- Node.js 18+
+- Free API key from [Finnhub.io](https://finnhub.io/dashboard)
 
-### Step-by-Step Deployment
+### Local Setup
 
-1.  **Upload to GitHub**:
-    - Create a new repository on GitHub.
-    - Use the "Add file" -> "Upload files" option on the repository page to upload all the project files and folders.
+1. **Clone and install**
+   ```bash
+   git clone https://github.com/JeromeGeek/neura-stock-app.git
+   cd neura-stock-app
+   npm install
+   ```
 
-2.  **Sign up for Vercel**:
-    - Go to [vercel.com](https://vercel.com/) and sign up using your GitHub account.
+2. **Add API key**
+   - Create `.env` file in root directory
+   - Add: `FINNHUB_API_KEY=your_api_key_here`
 
-3.  **Import and Deploy Project**:
-    - From your Vercel dashboard, click **"Add New..."** -> **"Project"**.
-    - Find and **"Import"** the GitHub repository you just created.
-    - Vercel will automatically detect the correct settings.
+3. **Start development server**
+   ```bash
+   npm run dev
+   ```
+   - Open http://localhost:3000
 
-4.  **Add Environment Variable (Crucial Step)**:
-    - Before deploying, expand the **Environment Variables** section.
-    - Create a new variable:
-      - **Name**: `FINNHUB_API_KEY`
-      - **Value**: Paste the API key you got from Finnhub.
-    - Click **"Add"**.
+### Deploy to Vercel
 
-5.  **Deploy**:
-    - Click the **"Deploy"** button.
-    - Vercel will build and deploy your application. In a minute, you'll have a live URL for your fully functional stock tracking app!
+1. Push to GitHub
+2. Import project on [Vercel](https://vercel.com)
+3. Add `FINNHUB_API_KEY` environment variable
+4. Deploy
+
+---
+
+## ✨ Features
+
+- Real-time stock quotes
+- Customizable dashboard with drag-and-drop
+- Stock price charts (simulated data on free API tier)
+- Personalized watchlist
+- Stock comparison tool
+- Financial news
+- Search stocks by ticker or company name
+
+**Note**: Charts use simulated data based on current prices. Historical data requires a premium Finnhub subscription.
+
+---
+
+## �️ Tech Stack
+
+- **Frontend**: React, TypeScript, Vite
+- **Styling**: Tailwind CSS
+- **Charts**: Recharts
+- **API**: Finnhub.io
+- **Deployment**: Vercel
 
 ---
 
 ## 📁 Project Structure
 
-The codebase is organized to be clean and maintainable.
-
 ```
 /
-├── api/
-│   └── [[path]].ts       # Serverless proxy function for Finnhub API calls
-├── components/           # Reusable React components (Card, Chart, etc.)
-├── hooks/                # Custom React hooks (useWatchlist, useRealtimeQuotes)
-├── pages/                # Top-level page components (HomePage, StockDetailPage)
-├── services/             # API service layer (stockService.ts)
-├── utils/                # Helper functions (formatTime.ts)
-├── App.tsx               # Main application component and routing logic
-├── index.html            # The single HTML entry point
-├── index.tsx             # React DOM renderer
-├── types.ts              # TypeScript type definitions
-└── README.md             # This file
+├── api/              # Serverless proxy for API calls
+├── components/       # React components
+├── hooks/            # Custom React hooks
+├── pages/            # Page components
+├── services/         # API service layer
+├── App.tsx           # Main app component
+└── index.tsx         # React entry point
 ```
-
-### Serverless API Proxy (`/api/[[path]].ts`)
-
-To protect the `FINNHUB_API_KEY`, the frontend does not call the Finnhub API directly. Instead, it calls a serverless function hosted at `/api/*`. This function, running on Vercel's edge network, receives the request, securely attaches the API key, forwards it to Finnhub, and returns the response to the frontend. This is a best practice for handling API keys in modern web applications.
 
 ---
 
-*Disclaimer: Market data provided by Finnhub. Data is delayed and for informational purposes only. Not for trading purposes.*
+**Developed by Jerome Kingsly**
+
+*Market data is delayed and for informational purposes only.*
