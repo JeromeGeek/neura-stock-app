@@ -116,15 +116,11 @@ const getQuote = async (ticker: string): Promise<StockQuote | null> => {
         const quoteData = await apiRequest<any>(`/quote?symbol=${ticker}`);
         if (!quoteData || (quoteData.c === 0 && quoteData.pc === 0)) return null;
 
+        // Use static profile cache only (skip profile2 API call that returns 404)
         let profile = getCachedProfile(ticker);
         if (!profile) {
-            const profileData = await apiRequest<any>(`/stock/profile2?symbol=${ticker}`);
-            if (profileData && profileData.name) {
-                profile = { name: profileData.name, ticker: profileData.ticker || ticker };
-                setCachedProfile(ticker, profile);
-            } else {
-                profile = { name: ticker, ticker: ticker };
-            }
+            // Fallback to ticker name if not in static cache
+            profile = { name: ticker, ticker: ticker };
         }
 
         const quote = {
