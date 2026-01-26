@@ -80,16 +80,21 @@ const MARKET_INDEX_TICKERS = ['SPY', 'QQQ', 'DIA'];
 
 // Global Request Queue to strictly follow Finnhub Free Tier (60 req/min)
 let requestQueue: Promise<any> = Promise.resolve();
-const REQ_DELAY = 1100; // Reduced to 1.1s (safer than 1s, faster than 1.3s) = ~54 req/min
+const REQ_DELAY = 500; // Reduced to 0.5s for faster initial load (allows ~2 req/sec = 120 req/min burst, then cache takes over)
 
 const apiRequest = async <T>(endpoint: string): Promise<T | null> => {
     const result = requestQueue.then(async () => {
         await new Promise(resolve => setTimeout(resolve, REQ_DELAY));
         try {
             const response = await fetch(`${API_BASE_URL}${endpoint}`);
-            if (!response.ok) {
+            // 304 Not Modified is OK - browser is using cache
+            if (!response.ok && response.status !== 304) {
                 console.error(`API request failed for ${endpoint}: Status ${response.status}`);
                 return null;
+            }
+            // For 304, the browser serves from cache automatically
+            if (response.status === 304) {
+                return null; // Let cache handling take over
             }
             return response.json();
         } catch (e) {

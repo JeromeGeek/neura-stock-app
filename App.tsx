@@ -14,26 +14,8 @@ type View =
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>({ name: 'home' });
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(false); // Changed to false to disable loading overlay
   const [homeDataLoaded, setHomeDataLoaded] = useState(false);
-
-  useEffect(() => {
-    // Show loading overlay until home data is loaded or minimum 2 seconds
-    const minTimer = setTimeout(() => {
-      if (homeDataLoaded) {
-        setIsInitialLoad(false);
-      }
-    }, 2000);
-
-    const maxTimer = setTimeout(() => {
-      setIsInitialLoad(false);
-    }, 5000); // Maximum 5 seconds
-
-    return () => {
-      clearTimeout(minTimer);
-      clearTimeout(maxTimer);
-    };
-  }, [homeDataLoaded]);
 
   const handleDataLoaded = () => {
     setHomeDataLoaded(true);
